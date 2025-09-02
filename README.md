@@ -16,12 +16,8 @@ You'll need the following software installed on your system:
 
 ### 1. Clone the Repository
 
-Clone this repository to your local machine using Git:
+Clone this repository to your local machine using Git
 
-```bash
-git clone [https://github.com/your-username/your-repository.git](https://github.com/your-username/your-repository.git)
-cd your-repository/functions
-```
 
 ### 2. Install Dependencies
 Navigate into the functions directory and install the required Node.js packages:
