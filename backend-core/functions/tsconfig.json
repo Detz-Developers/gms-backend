@@ -1,17 +1,21 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
-    "esModuleInterop": true,
-    "moduleResolution": "nodenext",
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
-    "outDir": "lib",
-    "sourceMap": true,
-    "strict": true,
-    "target": "es2017"
+    "module": "NodeNext",             // Use NodeNext for module resolution
+    "esModuleInterop": true,          // Ensures compatibility with commonjs
+    "moduleResolution": "nodenext",   // Use "nodenext" for resolving ES modules
+    "noImplicitReturns": true,        // Ensures functions return a value in all paths
+    "noUnusedLocals": true,           // Warn about unused variables in the code
+    "outDir": "lib",                  // Output compiled JavaScript code to "lib" folder
+    "sourceMap": true,                // Enable source maps for debugging
+    "strict": true,                   // Enable strict mode for TypeScript
+    "target": "es2017",               // Use ES2017 features for better performance
+    "rootDir": "src"                  // Set the root directory to the "src" folder
   },
-  "compileOnSave": true,
+  "compileOnSave": true,              // Compile on save (useful in IDEs like VSCode)
   "include": [
-    "src"
+    "src/**/*"                        // Include all TypeScript files in the "src" folder
+  ],
+  "exclude": [
+    "node_modules"                    // Exclude node_modules from the compilation process
   ]
 }
