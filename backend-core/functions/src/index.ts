@@ -1,42 +1,95 @@
-import { https } from "firebase-functions/v2";  // Import HTTP functions from v2
-import { logger } from "firebase-functions";   // Logger for logging
-import * as admin from "firebase-admin";       // Firebase Admin SDK to interact with Firestore
+import { https } from "firebase-functions/v2";
+import { logger } from "firebase-functions";
+import * as admin from "firebase-admin";
 
-// Initialize Firebase Admin SDK
-admin.initializeApp();
-const db = admin.firestore();  // Firestore database instance
+// Initialize Firebase Admin SDK with production database URL
+admin.initializeApp({
+  databaseURL: "https://genizest-default-rtdb.firebaseio.com/"  // Production Firebase Realtime Database URL
+});
 
-// Create a new generator
+const db = admin.database();  // Realtime Database instance
+
+// Generate the next generator ID (e.g., G001, G002)
+async function generateNextGeneratorId(): Promise<string> {
+  const ref = db.ref('id_counter/last_generator_id'); // Path to the counter node
+
+  // Get the current counter value
+  const snapshot = await ref.once('value');
+  let currentId = snapshot.val();
+
+  // If no ID exists, start from G001
+  if (!currentId) {
+    currentId = 1;  // Start with G001
+  } else {
+    currentId++;  // Increment the last used ID
+  }
+
+  // Update the last used ID
+  await ref.set(currentId);
+
+  // Format the ID (e.g., G001, G002, G003)
+  return `G${currentId.toString().padStart(3, '0')}`;
+}
+
+// Utility to parse and format date
+function parseDate(dateString: string | undefined): string | null {
+  if (!dateString) return null;
+  // Try to parse the date in "YYYY-MM-DD" format
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return null; // If invalid date, return null
+  return date.toISOString(); // Convert to ISO string
+}
+
+// Create a new generator with a custom sequential ID
 export const createGenerator = https.onRequest(async (req, res): Promise<void> => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
   }
 
-  const { brand, sizeKw, serialNumber, status, location, assignedShop } = req.body;
+  const { 
+    brand, 
+    sizeKw, 
+    serialNumber, 
+    status, 
+    location, 
+    assignedShop, 
+    issuedDate, 
+    installedDate, 
+    operatingHours, 
+    lastServiceDate, 
+    nextServiceDate 
+  } = req.body;
 
   try {
+    // Generate the next sequential ID
+    const generatorId = await generateNextGeneratorId();
+
     const newGenerator = {
+      id: generatorId,  // Use the generated ID (G001, G002, ...)
       brand,
       sizeKw,
       serialNumber,
       status,
       location,
       assignedShop,
-      issuedDate: new Date(),
-      installedDate: new Date(),
-      operatingHours: 0,
-      lastServiceDate: null,
-      nextServiceDate: null,
+      issuedDate: parseDate(issuedDate) || new Date().toISOString(),  // Parse and use provided date or current date
+      installedDate: parseDate(installedDate) || new Date().toISOString(),  // Parse and use provided date or current date
+      operatingHours: operatingHours || 0,  // Default to 0 if not provided
+      lastServiceDate: parseDate(lastServiceDate) || null,  // Allow null if not provided
+      nextServiceDate: parseDate(nextServiceDate) || null,  // Allow null if not provided
     };
 
-    const generatorRef = await db.collection('generators').add(newGenerator);
+    // Push to Realtime Database (store by custom ID)
+    await db.ref('generators').child(generatorId).set(newGenerator);
 
-    logger.info("Generator created successfully", { generatorId: generatorRef.id });
+    // Log the generator ID
+    logger.info("Generator created successfully", { generatorId });
 
+    // Return the generator ID in the response
     res.status(201).json({
       message: 'Generator created successfully',
-      generatorId: generatorRef.id,
+      generatorId,  // Return the generatorId here
     });
 
     return;
@@ -47,6 +100,8 @@ export const createGenerator = https.onRequest(async (req, res): Promise<void> =
   }
 });
 
+
+
 // Get all generators
 export const getGenerators = https.onRequest(async (req, res): Promise<void> => {
   if (req.method !== 'GET') {
@@ -55,12 +110,18 @@ export const getGenerators = https.onRequest(async (req, res): Promise<void> => 
   }
 
   try {
-    const snapshot = await db.collection('generators').get();
+    const snapshot = await db.ref('generators').once('value');
+    const data = snapshot.val();
+    
     let generators: any[] = [];
-
-    snapshot.forEach(doc => {
-      generators.push({ id: doc.id, ...doc.data() });
-    });
+    
+    if (data) {
+      // Convert object to array with IDs
+      generators = Object.keys(data).map(key => ({
+        id: key,
+        ...data[key]
+      }));
+    }
 
     logger.info("Fetched all generators");
 
@@ -83,16 +144,17 @@ export const getGeneratorById = https.onRequest(async (req, res): Promise<void> 
   }
 
   try {
-    const generatorDoc = await db.collection('generators').doc(id).get();
+    const snapshot = await db.ref(`generators/${id}`).once('value');
+    const data = snapshot.val();
 
-    if (!generatorDoc.exists) {
+    if (!data) {
       res.status(404).json({ message: 'Generator not found' });
       return;
     }
 
     logger.info("Fetched generator by ID", { id });
 
-    res.status(200).json({ id: generatorDoc.id, ...generatorDoc.data() });
+    res.status(200).json({ id, ...data });
     return;
   } catch (error: any) {
     logger.error("Error occurred while fetching generator by ID:", error);
@@ -113,9 +175,15 @@ export const updateGenerator = https.onRequest(async (req, res): Promise<void> =
   const updatedData = req.body;
 
   try {
-    const generatorRef = db.collection('generators').doc(id);
+    // Check if generator exists first
+    const snapshot = await db.ref(`generators/${id}`).once('value');
+    if (!snapshot.val()) {
+      res.status(404).json({ message: 'Generator not found' });
+      return;
+    }
 
-    await generatorRef.update(updatedData);
+    // Update the generator
+    await db.ref(`generators/${id}`).update(updatedData);
 
     logger.info("Generator updated successfully", { id, updatedData });
 
@@ -142,7 +210,14 @@ export const deleteGenerator = https.onRequest(async (req, res): Promise<void> =
   }
 
   try {
-    await db.collection('generators').doc(id).delete();
+    // Check if generator exists first
+    const snapshot = await db.ref(`generators/${id}`).once('value');
+    if (!snapshot.val()) {
+      res.status(404).json({ message: 'Generator not found' });
+      return;
+    }
+
+    await db.ref(`generators/${id}`).remove();
 
     logger.info("Generator deleted successfully", { id });
 
