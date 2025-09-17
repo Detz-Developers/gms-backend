@@ -57,8 +57,9 @@ export const createGenerator = https.onRequest(async (req, res): Promise<void> =
     issuedDate, 
     installedDate, 
     operatingHours, 
-    lastServiceDate, 
-    nextServiceDate 
+    warrantyExpiryDate,
+    hasBatteryCharger,
+    hasAutoStart
   } = req.body;
 
   try {
@@ -76,8 +77,9 @@ export const createGenerator = https.onRequest(async (req, res): Promise<void> =
       issuedDate: parseDate(issuedDate) || new Date().toISOString(),  // Parse and use provided date or current date
       installedDate: parseDate(installedDate) || new Date().toISOString(),  // Parse and use provided date or current date
       operatingHours: operatingHours || 0,  // Default to 0 if not provided
-      lastServiceDate: parseDate(lastServiceDate) || null,  // Allow null if not provided
-      nextServiceDate: parseDate(nextServiceDate) || null,  // Allow null if not provided
+      warrantyExpiryDate: parseDate(warrantyExpiryDate) || null,  // New: warranty expiry date
+      hasBatteryCharger: hasBatteryCharger || false,  // New: battery charger status (default false)
+      hasAutoStart: hasAutoStart || false,  // New: auto start status (default false)
     };
 
     // Push to Realtime Database (store by custom ID)
@@ -99,8 +101,6 @@ export const createGenerator = https.onRequest(async (req, res): Promise<void> =
     return;
   }
 });
-
-
 
 // Get all generators
 export const getGenerators = https.onRequest(async (req, res): Promise<void> => {
@@ -136,7 +136,7 @@ export const getGenerators = https.onRequest(async (req, res): Promise<void> => 
 
 // Get generator by ID (using query parameter)
 export const getGeneratorById = https.onRequest(async (req, res): Promise<void> => {
-  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=ABC123)
+  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=G001)
 
   if (!id) {
     res.status(400).json({ error: 'ID is required (use ?id=...)' });
@@ -165,7 +165,7 @@ export const getGeneratorById = https.onRequest(async (req, res): Promise<void> 
 
 // Update generator by ID (using query parameter)
 export const updateGenerator = https.onRequest(async (req, res): Promise<void> => {
-  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=ABC123)
+  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=G001)
 
   if (!id) {
     res.status(400).json({ error: 'ID is required (use ?id=...)' });
@@ -173,6 +173,17 @@ export const updateGenerator = https.onRequest(async (req, res): Promise<void> =
   }
 
   const updatedData = req.body;
+
+  // Parse dates in updated data if provided
+  if (updatedData.warrantyExpiryDate) {
+    updatedData.warrantyExpiryDate = parseDate(updatedData.warrantyExpiryDate);
+  }
+  if (updatedData.issuedDate) {
+    updatedData.issuedDate = parseDate(updatedData.issuedDate);
+  }
+  if (updatedData.installedDate) {
+    updatedData.installedDate = parseDate(updatedData.installedDate);
+  }
 
   try {
     // Check if generator exists first
@@ -202,7 +213,7 @@ export const updateGenerator = https.onRequest(async (req, res): Promise<void> =
 
 // Delete generator by ID (using query parameter)
 export const deleteGenerator = https.onRequest(async (req, res): Promise<void> => {
-  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=ABC123)
+  const id = req.query.id as string;  // Get ID from query parameter (e.g., ?id=G001)
 
   if (!id) {
     res.status(400).json({ error: 'ID is required (use ?id=...)' });
